@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Game Hub</title>
+    <style>
+        /* --- Base & Layout --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Fits in one screen */
+        }
+
+        /* --- Header & Search --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            background-color: #1e293b;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        header h1 { font-size: 1.5rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
+        .search-bar input {
+            padding: 10px 15px;
+            border-radius: 20px;
+            border: none;
+            outline: none;
+            background-color: #334155;
+            color: white;
+            width: 250px;
+            font-size: 0.9rem;
+        }
+
+        /* --- Category Slider --- */
+        .category-slider {
+            display: flex;
+            gap: 15px;
+            padding: 15px 25px;
+            background-color: #1e293b;
+            overflow-x: auto;
+            white-space: nowrap;
+            scrollbar-width: none; /* Firefox */
+        }
+        .category-slider::-webkit-scrollbar { display: none; } /* Chrome */
+        .category-btn {
+            background: #334155;
+            color: #cbd5e1;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .category-btn.active, .category-btn:hover { background: #38bdf8; color: #0f172a; }
+
+        /* --- Game Grid --- */
+        .game-grid {
+            flex-grow: 1;
+            padding: 25px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            overflow-y: auto;
+            align-content: start;
+        }
+        .game-card {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid transparent;
+        }
+        .game-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.5); border-color: #38bdf8; }
+        .game-icon { font-size: 3rem; margin-bottom: 10px; }
+        .game-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
+        .game-tags { font-size: 0.75rem; color: #94a3b8; }
+
+        /* --- Modal / Preview Window --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 100;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: all; }
+        .modal-content {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 30px;
+            position: relative;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .close-btn {
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .close-btn:hover { background: #dc2626; }
+        
+        /* Game Container Area */
+        #game-container { margin-top: 10px; }
+        
+        /* Utility styles for games */
+        .game-ui-btn { padding: 10px 20px; background: #38bdf8; color: #0f172a; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .tictactoe-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; background: #334155; padding: 5px; border-radius: 8px; }
+        .tictactoe-cell { width: 80px; height: 80px; background: #1e293b; display: flex; justify-content: center; align-items: center; font-size: 2.5rem; font-weight: bold; cursor: pointer; border-radius: 4px; color: white;}
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Mini Game Hub</h1>
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search games or tags...">
+        </div>
+    </header>
+
+    <div class="category-slider" id="categorySlider">
+        <!-- Categories injected via JS -->
+    </div>
+
+    <main class="game-grid" id="gameGrid">
+        <!-- Game cards injected via JS -->
+    </main>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content" id="modalContent">
+            <button class="close-btn" id="closeBtn">&times;</button>
+            <h2 id="modalTitle" style="margin-bottom: 10px;">Game Title</h2>
+            <div id="game-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. GAME LIBRARY & LOGIC
+        // ==========================================
+        
+        // This object tracks active intervals/listeners to clean up when a game closes
+        let activeGameProcess = {
+            intervals: [],
+            events: [],
+            clear: function() {
+                this.intervals.forEach(clearInterval);
+                this.events.forEach(e => document.removeEventListener(e.type, e.fn));
+                this.intervals = [];
+                this.events = [];
+                document.getElementById('game-container').innerHTML = '';
+            }
+        };
+
+        const games = [
+            {
+                id: 'snake',
+                name: 'Classic Snake',
+                icon: '🐍',
+                category: 'Arcade',
+                tags: ['retro', 'grid', 'classic', 'action'],
+                init: (container) => {
+                    container.innerHTML = `<canvas id="snakeCanvas" width="400" height="400" style="background:#0f172a; border: 2px solid #334155; border-radius: 8px;"></canvas><br><p style="text-align:center; margin-top:10px;">Score: <span id="snakeScore">0</span></p>`;
+                    const canvas = document.getElementById('snakeCanvas');
+                    const ctx = canvas.getContext('2d');
+                    const box = 20;
+                    let snake = [];
+                    snake[0] = { x: 9 * box, y: 10 * box };
+                    let food = { x: Math.floor(Math.random() * 19 + 1) * box, y: Math.floor(Math.random() * 19 + 1) * box };
+                    let score = 0;
+                    let d;
+
+                    const directionFn = (event) => {
+                        if ([37, 38, 39, 40].includes(event.keyCode)) event.preventDefault(); // Prevent scrolling
+                        if (event.keyCode == 37 && d != "RIGHT") d = "LEFT";
+                        else if (event.keyCode == 38 && d != "DOWN") d = "UP";
+                        else if (event.keyCode == 39 && d != "LEFT") d = "RIGHT";
+                        else if (event.keyCode == 40 && d != "UP") d = "DOWN";
+                    };
+                    document.addEventListener("keydown", directionFn);
+                    activeGameProcess.events.push({ type: 'keydown', fn: directionFn });
+
+                    function collision(head, array) {
+                        for (let i = 0; i < array.length; i++) {
+                            if (head.x == array[i].x && head.y == array[i].y) return true;
+                        }
+                        return false;
+                    }
+
+                    function draw() {
+                        ctx.fillStyle = "#0f172a";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        for (let i = 0; i < snake.length; i++) {
+                            ctx.fillStyle = (i == 0) ? "#38bdf8" : "#94a3b8";
+                            ctx.fillRect(snake[i].x, snake[i].y, box, box);
+                            ctx.strokeStyle = "#0f172a";
+                            ctx.strokeRect(snake[i].x, snake[i].y, box, box);
+                        }
+                        ctx.fillStyle = "#ef4444";
+                        ctx.fillRect(food.x, food.y, box, box);
+
+                        let snakeX = snake[0].x;
+                        let snakeY = snake[0].y;
+
+                        if (d == "LEFT") snakeX -= box;
+                        if (d == "UP") snakeY -= box;
+                        if (d == "RIGHT") snakeX += box;
+                        if (d == "DOWN") snakeY += box;
+
+                        if (snakeX == food.x && snakeY == food.y) {
+                            score++;
+                            document.getElementById('snakeScore').innerText = score;
+                            food = { x: Math.floor(Math.random() * 19 + 1) * box, y: Math.floor(Math.random() * 19 + 1) * box };
+                        } else {
+                            snake.pop();
+                        }
+
+                        let newHead = { x: snakeX, y: snakeY };
+
+                        if (snakeX < 0 || snakeX >= canvas.width || snakeY < 0 || snakeY >= canvas.height || collision(newHead, snake)) {
+                            clearInterval(game);
+                            ctx.fillStyle = "white";
+                            ctx.font = "40px Arial";
+                            ctx.fillText("Game Over", 100, 200);
+                        }
+                        snake.unshift(newHead);
+                    }
+                    let game = setInterval(draw, 100);
+                    activeGameProcess.intervals.push(game);
+                }
+            },
+            {
+                id: 'tictactoe',
+                name: 'Tic Tac Toe',
+                icon: '❌',
+                category: 'Board',
+                tags: ['puzzle', 'strategy', '2player'],
+                init: (container) => {
+                    container.innerHTML = `
+                        <div class="tictactoe-board" id="ttBoard">
+                            <div class="tictactoe-cell" data-idx="0"></div><div class="tictactoe-cell" data-idx="1"></div><div class="tictactoe-cell" data-idx="2"></div>
+                            <div class="tictactoe-cell" data-idx="3"></div><div class="tictactoe-cell" data-idx="4"></div><div class="tictactoe-cell" data-idx="5"></div>
+                            <div class="tictactoe-cell" data-idx="6"></div><div class="tictactoe-cell" data-idx="7"></div><div class="tictactoe-cell" data-idx="8"></div>
+                        </div>
+                        <p id="ttStatus" style="text-align:center; margin-top:15px; font-size:1.2rem;">Player X's turn</p>
+                        <button class="game-ui-btn" id="ttReset" style="width:100%">Restart Game</button>
+                    `;
+                    let board = ["", "", "", "", "", "", "", "", ""];
+                    let currentPlayer = "X";
+                    let gameActive = true;
+                    const winningConditions = [ [0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6] ];
+                    
+                    const cells = container.querySelectorAll('.tictactoe-cell');
+                    const statusText = document.getElementById('ttStatus');
+                    
+                    function handleCellClick(e) {
+                        const cell = e.target;
+                        const idx = cell.getAttribute('data-idx');
+                        if (board[idx] !== "" || !gameActive) return;
+                        board[idx] = currentPlayer;
+                        cell.innerText = currentPlayer;
+                        cell.style.color = currentPlayer === 'X' ? '#38bdf8' : '#ef4444';
+                        checkWin();
+                    }
+
+                    function checkWin() {
+                        let roundWon = false;
+                        for (let i = 0; i < winningConditions.length; i++) {
+                            const [a, b, c] = winningConditions[i];
+                            if (board[a] && board[a] === board[b] && board[a] === board[c]) { roundWon = true; break; }
+                        }
+                        if (roundWon) {
+                            statusText.innerText = `Player ${currentPlayer} Wins!`;
+                            gameActive = false;
+                            return;
+                        }
+                        if (!board.includes("")) {
+                            statusText.innerText = "Game ended in a draw!";
+                            gameActive = false;
+                            return;
+                        }
+                        currentPlayer = currentPlayer === "X" ? "O" : "X";
+                        statusText.innerText = `Player ${currentPlayer}'s turn`;
+                    }
+
+                    cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+                    document.getElementById('ttReset').addEventListener('click', () => {
+                        board = ["", "", "", "", "", "", "", "", ""];
+                        currentPlayer = "X";
+                        gameActive = true;
+                        statusText.innerText = `Player X's turn`;
+                        cells.forEach(cell => cell.innerText = "");
+                    });
+                }
+            },
+            {
+                id: 'reaction',
+                name: 'Reaction Test',
+                icon: '⚡',
+                category: 'Puzzle',
+                tags: ['speed', 'clicker', 'focus'],
+                init: (container) => {
+                    container.innerHTML = `
+                        <div id="reactionArea" style="width:300px; height:300px; background:#ef4444; border-radius:12px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:1.5rem; font-weight:bold; text-align:center; padding:20px; transition: background 0.1s;">
+                            Click to start.<br>Wait for green.
+                        </div>
+                        <p style="text-align:center; margin-top:15px; font-size:1.2rem;">Time: <span id="reactionTime">0</span> ms</p>
+                    `;
+                    const area = document.getElementById('reactionArea');
+                    const timeDisp = document.getElementById('reactionTime');
+                    let state = 'waiting_to_start'; // waiting_to_start, waiting_for_green, green
+                    let timeout;
+                    let startTime;
+
+                    area.addEventListener('click', () => {
+                        if (state === 'waiting_to_start') {
+                            area.style.background = '#ef4444';
+                            area.innerHTML = 'Wait for green...';
+                            state = 'waiting_for_green';
+                            timeDisp.innerText = '0';
+                            
+                            const randomDelay = Math.floor(Math.random() * 3000) + 1000;
+                            timeout = setTimeout(() => {
+                                area.style.background = '#22c55e';
+                                area.innerHTML = 'CLICK NOW!';
+                                state = 'green';
+                                startTime = Date.now();
+                            }, randomDelay);
+                            activeGameProcess.intervals.push(timeout);
+
+                        } else if (state === 'waiting_for_green') {
+                            clearTimeout(timeout);
+                            area.style.background = '#3b82f6';
+                            area.innerHTML = 'Too early! Click to try again.';
+                            state = 'waiting_to_start';
+                        } else if (state === 'green') {
+                            const reactTime = Date.now() - startTime;
+                            timeDisp.innerText = reactTime;
+                            area.style.background = '#3b82f6';
+                            area.innerHTML = `Click to play again.`;
+                            state = 'waiting_to_start';
+                        }
+                    });
+                }
+            },
+            {
+                id: 'catchdot',
+                name: 'Catch the Dot',
+                icon: '🎯',
+                category: 'Arcade',
+                tags: ['speed', 'mouse', 'aim'],
+                init: (container) => {
+                    container.innerHTML = `
+                        <div id="dotArena" style="width:400px; height:300px; background:#334155; border-radius:8px; position:relative; overflow:hidden; border:2px solid #475569;">
+                            <div id="targetDot" style="width:30px; height:30px; background:#38bdf8; border-radius:50%; position:absolute; cursor:pointer; top:135px; left:185px;"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-top:10px; width:400px;">
+                            <span>Score: <b id="dotScore">0</b></span>
+                            <span>Time left: <b id="dotTime">30</b>s</span>
+                        </div>
+                        <button class="game-ui-btn" id="dotStart" style="width:100%">Start Game</button>
+                    `;
+                    
+                    const dot = document.getElementById('targetDot');
+                    const arena = document.getElementById('dotArena');
+                    const scoreDisp = document.getElementById('dotScore');
+                    const timeDisp = document.getElementById('dotTime');
+                    const startBtn = document.getElementById('dotStart');
+                    
+                    let score = 0;
+                    let timeLeft = 30;
+                    let playing = false;
+                    let timerInterval;
+
+                    function moveDot() {
+                        const maxX = arena.clientWidth - 30;
+                        const maxY = arena.clientHeight - 30;
+                        dot.style.left = Math.floor(Math.random() * maxX) + 'px';
+                        dot.style.top = Math.floor(Math.random() * maxY) + 'px';
+                    }
+
+                    dot.addEventListener('click', () => {
+                        if (!playing) return;
+                        score++;
+                        scoreDisp.innerText = score;
+                        moveDot();
+                    });
+
+                    startBtn.addEventListener('click', () => {
+                        if(playing) return;
+                        score = 0;
+                        timeLeft = 30;
+                        scoreDisp.innerText = score;
+                        timeDisp.innerText = timeLeft;
+                        playing = true;
+                        startBtn.style.display = 'none';
+                        moveDot();
+
+                        timerInterval = setInterval(() => {
+                            timeLeft--;
+                            timeDisp.innerText = timeLeft;
+                            if(timeLeft <= 0) {
+                                clearInterval(timerInterval);
+                                playing = false;
+                                startBtn.style.display = 'block';
+                                startBtn.innerText = 'Play Again';
+                                dot.style.top = '135px';
+                                dot.style.left = '185px';
+                                alert(`Time's up! You caught ${score} dots.`);
+                            }
+                        }, 1000);
+                        activeGameProcess.intervals.push(timerInterval);
+                    });
+                }
+            }
+			
+        ];
+
+        // ==========================================
+        // 2. UI RENDER LOGIC
+        // ==========================================
+
+        const categorySlider = document.getElementById('categorySlider');
+        const gameGrid = document.getElementById('gameGrid');
+        const searchInput = document.getElementById('searchInput');
+        
+        let currentCategory = 'All';
+
+        function initUI() {
+            // Setup Categories
+            const categories = ['All', ...new Set(games.map(g => g.category))];
+            categorySlider.innerHTML = categories.map(cat => 
+                `<button class="category-btn ${cat === 'All' ? 'active' : ''}" data-cat="${cat}">${cat}</button>`
+            ).join('');
+
+            // Category click listeners
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentCategory = e.target.getAttribute('data-cat');
+                    renderGrid();
+                });
+            });
+
+            // Search listener
+            searchInput.addEventListener('input', renderGrid);
+
+            // Initial render
+            renderGrid();
+        }
+
+        function renderGrid() {
+            const query = searchInput.value.toLowerCase();
+            
+            const filteredGames = games.filter(game => {
+                const matchesCat = currentCategory === 'All' || game.category === currentCategory;
+                const matchesSearch = game.name.toLowerCase().includes(query) || 
+                                      game.tags.some(tag => tag.toLowerCase().includes(query));
+                return matchesCat && matchesSearch;
+            });
+
+            if (filteredGames.length === 0) {
+                gameGrid.innerHTML = `<h2 style="grid-column: 1 / -1; text-align: center; color: #64748b; margin-top: 50px;">No games found.</h2>`;
+                return;
+            }
+
+            gameGrid.innerHTML = filteredGames.map(game => `
+                <div class="game-card" onclick="openGame('${game.id}')">
+                    <div class="game-icon">${game.icon}</div>
+                    <div class="game-title">${game.name}</div>
+                    <div class="game-tags">${game.tags.map(t => `#${t}`).join(' ')}</div>
+                </div>
+            `).join('');
+			
+        }
+
+        // ==========================================
+        // 3. MODAL & PREVIEW LOGIC
+        // ==========================================
+
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalContent = document.getElementById('modalContent');
+        const closeBtn = document.getElementById('closeBtn');
+        const gameContainer = document.getElementById('game-container');
+        const modalTitle = document.getElementById('modalTitle');
+
+        function openGame(gameId) {
+            const game = games.find(g => g.id === gameId);
+            if(!game) return;
+
+            modalTitle.innerText = game.name;
+            modalOverlay.classList.add('active');
+            
+            // Clear previous just in case, then init new
+            activeGameProcess.clear();
+            game.init(gameContainer);
+        }
+
+        function closeGame() {
+            modalOverlay.classList.remove('active');
+            // Slight delay to wait for fade out before destroying DOM
+            setTimeout(() => {
+                activeGameProcess.clear();
+            }, 300);
+        }
+
+        // Close via button
+        closeBtn.addEventListener('click', closeGame);
+
+        // Close via clicking outside window
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                closeGame();
+            }
+			
+        });
+
+        // Initialize App
+        window.onload = initUI;
+        
+    </script>
+</body>
+</html>
