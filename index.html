@@ -441,7 +441,90 @@
                         activeGameProcess.intervals.push(timerInterval);
                     });
                 }
+            }, // <-- TEN PRZECINEK JEST BARDZO WAŻNY
+            {
+                id: 'minidoom',
+                name: 'Mini FPS',
+                icon: '🔫',
+                category: 'Action',
+                tags: ['3d', 'doom', 'shooter', 'retro'],
+                init: (container) => {
+                    container.innerHTML = `
+                        <canvas id="fpsCanvas" width="300" height="200" style="background:#000; border-radius:8px; width:400px; height:266px; image-rendering:pixelated; display:block;"></canvas>
+                        <p style="text-align:center; margin-top:10px;">Use <b>W, S</b> to move and <b>A, D</b> to turn.</p>
+                    `;
+                    const canvas = container.querySelector('#fpsCanvas');
+                    const ctx = canvas.getContext('2d');
+                    let p = { x: 2.5, y: 2.5, a: 0 };
+                    const W = 8, H = 8;
+                    let keys = {};
+                    const map = [
+                        1,1,1,1,1,1,1,1,
+                        1,0,0,0,0,0,0,1,
+                        1,0,1,1,0,1,0,1,
+                        1,0,1,0,0,1,0,1,
+                        1,0,0,0,0,0,0,1,
+                        1,0,1,0,1,1,0,1,
+                        1,0,0,0,0,0,0,1,
+                        1,1,1,1,1,1,1,1
+                    ];
+
+                    const kD = e => { keys[e.code] = true; };
+                    const kU = e => { keys[e.code] = false; };
+                    
+                    document.addEventListener('keydown', kD);
+                    document.addEventListener('keyup', kU);
+                    activeGameProcess.events.push({ type: 'keydown', fn: kD }, { type: 'keyup', fn: kU });
+
+                    const loop = setInterval(() => {
+                        if (keys['KeyA']) p.a -= 0.1;
+                        if (keys['KeyD']) p.a += 0.1;
+                        let dx = Math.cos(p.a) * 0.1;
+                        let dy = Math.sin(p.a) * 0.1;
+                        
+                        if (keys['KeyW']) {
+                            if (!map[Math.floor(p.y) * W + Math.floor(p.x + dx)]) p.x += dx;
+                            if (!map[Math.floor(p.y + dy) * W + Math.floor(p.x)]) p.y += dy;
+                        }
+                        if (keys['KeyS']) {
+                            if (!map[Math.floor(p.y) * W + Math.floor(p.x - dx)]) p.x -= dx;
+                            if (!map[Math.floor(p.y - dy) * W + Math.floor(p.x)]) p.y -= dy;
+                        }
+
+                        ctx.fillStyle = '#38bdf8'; ctx.fillRect(0, 0, 300, 100);
+                        ctx.fillStyle = '#334155'; ctx.fillRect(0, 100, 300, 100);
+
+                        for (let i = 0; i < 300; i++) {
+                            let ra = p.a - 0.5 + (i / 300);
+                            let d = 0, hit = 0;
+                            while (!hit && d < 12) {
+                                d += 0.05;
+                                let mapX = Math.floor(p.x + Math.cos(ra) * d);
+                                let mapY = Math.floor(p.y + Math.sin(ra) * d);
+                                if (mapY >= 0 && mapY < H && mapX >= 0 && mapX < W) {
+                                    if (map[mapY * W + mapX]) hit = 1;
+                                } else {
+                                    hit = 1;
+                                }
+                            }
+                            let colorVal = Math.max(10, 100 - d * 10);
+                            ctx.fillStyle = 'hsl(0, 0%, ' + colorVal + '%)'; 
+                            let wallHeight = 150 / d;
+                            ctx.fillRect(i, 100 - wallHeight, 1, wallHeight * 2);
+                        }
+                    }, 33);
+                    activeGameProcess.intervals.push(loop);
+                }
             }
+
+            // =========================================================================
+            // 👇 WKLEJAJ NOWE GRY PONIŻEJ TEJ LINII (Pamiętaj o przecinku przed nią!) 👇
+            // =========================================================================
+            
+            
+            // =========================================================================
+            // 👆 WKLEJAJ NOWE GRY POWYŻEJ TEJ LINII 👆
+            // =========================================================================
 			
         ];
 
